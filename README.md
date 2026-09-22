@@ -7,7 +7,7 @@ A static web page that gets all images from an Amazon product listing and saves 
 1. Open the site.
 2. Paste an Amazon product link or an ASIN.
 3. Click **Get images**.
-4. Click **Download .zip** for all selected images, or click **.jpg** on one image.
+4. Click an image to save it as a `.jpg` file. Or clear the check boxes of the images you do not want, and click **Download .zip**.
 
 If the listing does not load, open the listing in your browser, copy the page source, and paste it into **Did not work? Paste the page source.**
 

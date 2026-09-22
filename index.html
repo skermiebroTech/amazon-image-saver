@@ -64,9 +64,13 @@
   .item img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .item input { position: absolute; top: 8px; left: 8px; width: 18px; height: 18px; accent-color: var(--accent); }
   .item .dl {
-    position: absolute; right: 6px; bottom: 6px; padding: 4px 8px; font-size: 12px;
-    border-radius: 6px; background: rgba(255,255,255,.92); color: #1b1f24; border-color: #c9ced6;
+    position: absolute; right: 6px; bottom: 6px; padding: 3px 8px; font-size: 12px; font-weight: 600;
+    border-radius: 6px; background: var(--accent); color: var(--accent-text);
+    opacity: 0; transition: opacity .15s;
   }
+  .item:hover .dl, .item.busy .dl, .item:focus-within .dl { opacity: 1; }
+  @media (hover: none) { .item .dl { opacity: 1; } }
+  .item.busy { cursor: progress; }
   .item .tag {
     position: absolute; left: 6px; bottom: 6px; font-size: 11px; padding: 2px 6px;
     background: rgba(0,0,0,.6); color: #fff; border-radius: 4px;
@@ -78,7 +82,7 @@
 <body>
 <main>
   <h1>Amazon Image Saver</h1>
-  <p class="sub">Paste an Amazon product link. Get every listing image as a full-size .jpg file.</p>
+  <p class="sub">Paste an Amazon product link. Get every listing image as a full-size .jpg file. Click an image to save it, or save the selected images as a .zip.</p>
 
   <div class="card">
     <form id="form" class="row">
@@ -258,21 +262,22 @@ function render(title) {
   images.forEach((img, i) => {
     const el = document.createElement('div');
     el.className = 'item sel';
-    el.innerHTML = `<input type="checkbox" checked aria-label="Select image ${i + 1}">
+    el.title = `Click to save ${fileName(i)}`;
+    el.innerHTML = `<input type="checkbox" checked aria-label="Select image ${i + 1} for the .zip">
       <img loading="lazy" alt="Image ${i + 1}" src="${srcFor(img, '500')}">
       <span class="tag">${i + 1}</span>
-      <button type="button" class="dl secondary">.jpg</button>`;
+      <span class="dl">Save .jpg</span>`;
     const cb = el.querySelector('input');
-    const sync = () => { el.classList.toggle('sel', cb.checked); updateZip(); };
-    cb.addEventListener('click', e => { e.stopPropagation(); sync(); });
-    el.addEventListener('click', () => { cb.checked = !cb.checked; sync(); });
-    el.querySelector('.dl').addEventListener('click', async e => {
-      e.stopPropagation();
-      const b = e.currentTarget;
-      b.disabled = true; b.textContent = '…';
-      try { saveBlob(await toJpeg(srcFor(img)), fileName(i)); b.textContent = '.jpg'; }
-      catch (err) { b.textContent = 'Error'; setStatus(`Image ${i + 1}: ${err.message}`, 'err'); }
-      b.disabled = false;
+    const label = el.querySelector('.dl');
+    cb.addEventListener('click', e => { e.stopPropagation(); el.classList.toggle('sel', cb.checked); updateZip(); });
+    // A click on the image saves that one image.
+    el.addEventListener('click', async () => {
+      if (el.classList.contains('busy')) return;
+      el.classList.add('busy'); label.textContent = 'Saving…';
+      try { saveBlob(await toJpeg(srcFor(img)), fileName(i)); label.textContent = 'Saved ✓'; }
+      catch (err) { label.textContent = 'Error'; setStatus(`Image ${i + 1}: ${err.message}`, 'err'); }
+      el.classList.remove('busy');
+      setTimeout(() => { label.textContent = 'Save .jpg'; }, 2000);
     });
     grid.appendChild(el);
   });
