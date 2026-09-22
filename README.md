@@ -9,7 +9,15 @@ A static web page that gets all images from an Amazon product listing and saves 
 3. Click **Get images**.
 4. Click an image to save it as a `.jpg` file. Or clear the check boxes of the images you do not want, and click **Download .zip**.
 
-If the listing does not load, open the listing in your browser, copy the page source, and paste it into **Did not work? Paste the page source.**
+## If the listing does not load
+
+The public proxies are not reliable. They can fail in some regions, and some browsers block them. Use the bookmarklet instead. It needs no proxy.
+
+1. Drag the **Save Amazon images** button to your bookmarks bar.
+2. Open a product page on Amazon.
+3. Click the bookmark. The images open in the saver.
+
+You can also open the listing in your browser, copy the page source, and paste it into **Did not work? Paste the page source.**
 
 ## How it works
 

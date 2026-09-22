@@ -75,6 +75,10 @@
     position: absolute; left: 6px; bottom: 6px; font-size: 11px; padding: 2px 6px;
     background: rgba(0,0,0,.6); color: #fff; border-radius: 4px;
   }
+  .bmk {
+    display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: 600;
+    background: var(--accent); color: var(--accent-text); text-decoration: none; cursor: grab;
+  }
   #results { display: none; }
   footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
 </style>
@@ -96,6 +100,16 @@
       <textarea id="html" placeholder="Paste the page source here"></textarea>
       <div class="row" style="margin-top:8px"><button id="parse" type="button" class="secondary">Get images from source</button></div>
     </details>
+  </div>
+
+  <div class="card">
+    <p style="margin:0 0 6px"><strong>No proxy? Use the bookmarklet.</strong> <span class="hint" style="display:inline">Works in every browser and every region.</span></p>
+    <ol class="hint" style="margin:0 0 10px; padding-left: 20px">
+      <li>Drag this button to your bookmarks bar: <a id="bm" class="bmk" href="#">Save Amazon images</a></li>
+      <li>Open a product page on Amazon.</li>
+      <li>Click the bookmark. The images open here, with no proxy.</li>
+    </ol>
+    <p class="hint">No bookmarks bar? Right-click the button, choose "Add to favorites" or "Bookmark link", and click that bookmark on the Amazon page.</p>
   </div>
 
   <div id="results" class="card">
@@ -332,8 +346,38 @@ $('form').addEventListener('submit', async e => {
   $('go').disabled = false;
 });
 
-const preset = new URLSearchParams(location.search).get('url');
-if (preset) { $('url').value = preset; $('form').requestSubmit(); }
+// The bookmarklet runs on the Amazon page. It collects the image IDs from the
+// gallery data and opens this page with them, so no proxy is needed.
+const SITE = location.origin + location.pathname;
+$('bm').href = 'javascript:' + encodeURIComponent(`(()=>{
+  const h = document.documentElement.outerHTML, ids = new Set();
+  for (const m of h.matchAll(/"hiRes":"[^"]*\\/images\\/I\\/([^".\\/]+)[^"]*\\.(jpe?g|png|webp|gif)"/g)) ids.add(m[1] + '.' + m[2]);
+  if (!ids.size) for (const m of h.matchAll(/data-a-dynamic-image="[^"]*?\\/images\\/I\\/([^".\\/]+)[^"]*?\\.(jpe?g|png)/g)) ids.add(m[1] + '.' + m[2]);
+  if (!ids.size) return alert('No listing images found. Open an Amazon product page first.');
+  const asin = (location.pathname.match(/\\/(?:dp|gp\\/product|gp\\/aw\\/d|product)\\/([A-Z0-9]{10})/i) || [])[1] || '';
+  const t = document.getElementById('productTitle');
+  const title = (t ? t.innerText : document.title).trim().slice(0, 150);
+  location.href = ${JSON.stringify(SITE)} + '?ids=' + [...ids].join(',') + '&asin=' + asin + '&title=' + encodeURIComponent(title);
+})()`);
+
+const params = new URLSearchParams(location.search);
+if (params.get('ids')) {
+  images = params.get('ids').split(',').map(v => {
+    const [id, ext] = v.split('.');
+    return id && /^(jpe?g|png|webp|gif)$/i.test(ext || '') ? { id, ext: ext.toLowerCase() } : null;
+  }).filter(Boolean);
+  if (images.length) {
+    const title = params.get('title') || '';
+    baseName = params.get('asin') || slug(title);
+    render(title);
+    setStatus(`Found ${images.length} images from the bookmarklet.`, 'ok');
+  } else {
+    setStatus('The bookmarklet sent no valid image IDs.', 'err');
+  }
+} else if (params.get('url')) {
+  $('url').value = params.get('url');
+  $('form').requestSubmit();
+}
 
 $('parse').addEventListener('click', () => {
   try { load($('html').value, null); } catch (err) { setStatus(err.message, 'err'); }
