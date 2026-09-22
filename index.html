@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amazon Image Saver</title>
+<meta name="description" content="Get all images from an Amazon listing and save them as JPG files.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5f6b7a;
+    --border: #dde1e6; --accent: #e47911; --accent-text: #ffffff;
+    --ok: #1a7f37; --err: #c62828; --shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #181c22; --text: #e6e9ed; --muted: #9aa5b1;
+      --border: #2b323b; --accent: #f08c2a; --accent-text: #111;
+      --ok: #4ac26b; --err: #ff6b6b; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  input[type=text], textarea, select {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  input[type=text] { flex: 1 1 320px; min-width: 0; }
+  textarea { width: 100%; min-height: 110px; font-family: ui-monospace, monospace; font-size: 12px; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px;
+    padding: 10px 16px; border: 1px solid var(--accent);
+    background: var(--accent); color: var(--accent-text);
+  }
+  button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+  button:disabled { opacity: .5; cursor: default; }
+  details summary { cursor: pointer; color: var(--muted); }
+  details[open] summary { margin-bottom: 8px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  #status { min-height: 1.5em; margin: 8px 0 0; font-size: 14px; }
+  #status.err { color: var(--err); }
+  #status.ok { color: var(--ok); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .toolbar .left { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .toolbar label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+  #title { font-weight: 600; margin: 0 0 12px; overflow-wrap: anywhere; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .item {
+    position: relative; border: 2px solid var(--border); border-radius: 8px; overflow: hidden;
+    background: #fff; cursor: pointer; aspect-ratio: 1;
+  }
+  .item.sel { border-color: var(--accent); }
+  .item img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .item input { position: absolute; top: 8px; left: 8px; width: 18px; height: 18px; accent-color: var(--accent); }
+  .item .dl {
+    position: absolute; right: 6px; bottom: 6px; padding: 4px 8px; font-size: 12px;
+    border-radius: 6px; background: rgba(255,255,255,.92); color: #1b1f24; border-color: #c9ced6;
+  }
+  .item .tag {
+    position: absolute; left: 6px; bottom: 6px; font-size: 11px; padding: 2px 6px;
+    background: rgba(0,0,0,.6); color: #fff; border-radius: 4px;
+  }
+  #results { display: none; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Amazon Image Saver</h1>
+  <p class="sub">Paste an Amazon product link. Get every listing image as a full-size .jpg file.</p>
+
+  <div class="card">
+    <form id="form" class="row">
+      <input id="url" type="text" placeholder="https://www.amazon.com/dp/B0XXXXXXXX  or an ASIN" autocomplete="off" required>
+      <button id="go" type="submit">Get images</button>
+    </form>
+    <p id="status"></p>
+    <details id="manual">
+      <summary>Did not work? Paste the page source.</summary>
+      <p class="hint">Open the listing in your browser. Press Ctrl+U (Cmd+Option+U on Mac) to show the source. Select all, copy, and paste it here.</p>
+      <textarea id="html" placeholder="Paste the page source here"></textarea>
+      <div class="row" style="margin-top:8px"><button id="parse" type="button" class="secondary">Get images from source</button></div>
+    </details>
+  </div>
+
+  <div id="results" class="card">
+    <p id="title"></p>
+    <div class="toolbar">
+      <div class="left">
+        <label><input id="all" type="checkbox" checked> Select all</label>
+        <label>Size
+          <select id="size">
+            <option value="orig">Original (largest)</option>
+            <option value="1500">1500 px</option>
+          </select>
+        </label>
+      </div>
+      <button id="zip" type="button">Download .zip</button>
+    </div>
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <footer>
+    This page runs in your browser. It gets the listing through a public CORS proxy, because a static site cannot read amazon.com directly.
+  </footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const PROXIES = [
+  u => 'https://cors.eu.org/' + u,
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+];
+
+const $ = id => document.getElementById(id);
+let images = [];   // [{id, ext}]
+let baseName = 'amazon';
+
+function setStatus(msg, cls = '') {
+  $('status').textContent = msg;
+  $('status').className = cls;
+}
+
+// Accept a full URL, a short link, or a bare ASIN.
+function normalizeInput(raw) {
+  raw = raw.trim();
+  if (/^[A-Z0-9]{10}$/i.test(raw)) return { url: 'https://www.amazon.com/dp/' + raw.toUpperCase(), asin: raw.toUpperCase() };
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw); } catch { return null; }
+  const m = u.pathname.match(/\/(?:dp|gp\/product|gp\/aw\/d|product)\/([A-Z0-9]{10})/i);
+  if (m) return { url: `${u.origin}/dp/${m[1].toUpperCase()}`, asin: m[1].toUpperCase() };
+  return { url: u.href, asin: null };  // short links such as a.co; the proxy follows redirects
+}
+
+async function fetchPage(url) {
+  let lastErr;
+  for (const [i, p] of PROXIES.entries()) {
+    setStatus(`Loading the listing (proxy ${i + 1} of ${PROXIES.length})…`);
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 25000);
+      const res = await fetch(p(url), { signal: ctrl.signal });
+      clearTimeout(t);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const html = await res.text();
+      if (extract(html).length) return html;
+      lastErr = new Error(/captcha|api-services-support/i.test(html) ? 'Amazon showed a captcha' : 'No images in the response');
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('All proxies failed');
+}
+
+// Image ID is the part after /images/I/ and before the first dot (size modifiers follow it).
+function imageKey(u) {
+  const m = u.match(/\/images\/I\/([^./]+)(?:\.[^/]*)?\.(jpe?g|png|gif|webp)/i);
+  return m ? { id: m[1], ext: m[2].toLowerCase() } : null;
+}
+
+function extract(html) {
+  const found = new Map();
+  const add = u => { const k = imageKey(u); if (k && !found.has(k.id)) found.set(k.id, k); };
+
+  // 1. The gallery data: 'colorImages': { 'initial': [...] }. Use hiRes, else large.
+  const start = html.search(/['"]colorImages['"]\s*:\s*\{\s*['"]initial['"]\s*:/);
+  if (start >= 0) {
+    const from = html.indexOf('[', start);
+    let depth = 0, end = from;
+    for (; end < html.length; end++) {
+      const c = html[end];
+      if (c === '[') depth++;
+      else if (c === ']' && --depth === 0) break;
+    }
+    try {
+      for (const img of JSON.parse(html.slice(from, end + 1))) {
+        const u = img.hiRes || img.large || (img.main && Object.keys(img.main).pop());
+        if (u) add(u);
+      }
+    } catch {}
+  }
+
+  // 2. Fallback: every "hiRes" value in the page.
+  if (!found.size) for (const m of html.matchAll(/"hiRes"\s*:\s*"([^"]+)"/g)) add(m[1]);
+
+  // 3. Fallback: the main image block (data-a-dynamic-image).
+  if (!found.size) {
+    for (const m of html.matchAll(/data-a-dynamic-image="([^"]+)"/g)) {
+      try { Object.keys(JSON.parse(m[1].replace(/&quot;/g, '"'))).forEach(add); } catch {}
+    }
+  }
+  return [...found.values()];
+}
+
+function pageTitle(html) {
+  const t = document.createElement('textarea');
+  let m = html.match(/id="productTitle"[^>]*>([\s\S]*?)</);
+  if (m) { t.innerHTML = m[1].trim(); return t.value; }
+  m = html.match(/<title>([\s\S]*?)<\/title>/);
+  if (!m) return '';
+  t.innerHTML = m[1].trim();
+  // Page titles look like "Amazon.com: <product> : <category>".
+  return t.value.replace(/^Amazon\.[a-z.]+\s*:\s*/i, '').replace(/\s+:\s+[^:]+$/, '').trim();
+}
+
+function srcFor(img, size = $('size').value) {
+  return `https://m.media-amazon.com/images/I/${img.id}${size === 'orig' ? '' : `._AC_SL${size}_`}.${img.ext === 'jpeg' ? 'jpg' : img.ext}`;
+}
+
+function slug(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'amazon';
+}
+
+function fileName(i) {
+  return `${baseName}_${String(i + 1).padStart(2, '0')}.jpg`;
+}
+
+// Get the image as a JPEG blob. Convert through a canvas when Amazon serves PNG, GIF, or WebP.
+async function toJpeg(url) {
+  const res = await fetch(url, { mode: 'cors' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const blob = await res.blob();
+  if (blob.type === 'image/jpeg') return blob;
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement('canvas');
+  c.width = bmp.width; c.height = bmp.height;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';            // JPEG has no transparency
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(bmp, 0, 0);
+  return new Promise((ok, bad) => c.toBlob(b => b ? ok(b) : bad(new Error('Convert failed')), 'image/jpeg', 0.95));
+}
+
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+function render(title) {
+  $('title').textContent = title ? `${title} — ${images.length} images` : `${images.length} images`;
+  const grid = $('grid');
+  grid.innerHTML = '';
+  images.forEach((img, i) => {
+    const el = document.createElement('div');
+    el.className = 'item sel';
+    el.innerHTML = `<input type="checkbox" checked aria-label="Select image ${i + 1}">
+      <img loading="lazy" alt="Image ${i + 1}" src="${srcFor(img, '500')}">
+      <span class="tag">${i + 1}</span>
+      <button type="button" class="dl secondary">.jpg</button>`;
+    const cb = el.querySelector('input');
+    const sync = () => { el.classList.toggle('sel', cb.checked); updateZip(); };
+    cb.addEventListener('click', e => { e.stopPropagation(); sync(); });
+    el.addEventListener('click', () => { cb.checked = !cb.checked; sync(); });
+    el.querySelector('.dl').addEventListener('click', async e => {
+      e.stopPropagation();
+      const b = e.currentTarget;
+      b.disabled = true; b.textContent = '…';
+      try { saveBlob(await toJpeg(srcFor(img)), fileName(i)); b.textContent = '.jpg'; }
+      catch (err) { b.textContent = 'Error'; setStatus(`Image ${i + 1}: ${err.message}`, 'err'); }
+      b.disabled = false;
+    });
+    grid.appendChild(el);
+  });
+  $('results').style.display = 'block';
+  $('all').checked = true;
+  updateZip();
+}
+
+function selected() {
+  return [...$('grid').querySelectorAll('.item input')].map((cb, i) => cb.checked ? i : -1).filter(i => i >= 0);
+}
+
+function updateZip() {
+  const n = selected().length;
+  $('zip').disabled = !n;
+  $('zip').textContent = `Download ${n} as .zip`;
+  $('all').checked = n === images.length;
+}
+
+function load(html, asin) {
+  images = extract(html);
+  if (!images.length) throw new Error('No listing images found in this page.');
+  const title = pageTitle(html);
+  const asinInPage = asin || (html.match(/"ASIN"\s*:\s*"([A-Z0-9]{10})"/) || [])[1];
+  baseName = asinInPage || slug(title);
+  render(title);
+  setStatus(`Found ${images.length} images.`, 'ok');
+}
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = normalizeInput($('url').value);
+  if (!input) return setStatus('That does not look like a link or an ASIN.', 'err');
+  $('go').disabled = true;
+  try {
+    load(await fetchPage(input.url), input.asin);
+  } catch (err) {
+    setStatus(`Could not load the listing: ${err.message}. Try again, or paste the page source below.`, 'err');
+    $('manual').open = true;
+  }
+  $('go').disabled = false;
+});
+
+$('parse').addEventListener('click', () => {
+  try { load($('html').value, null); } catch (err) { setStatus(err.message, 'err'); }
+});
+
+$('all').addEventListener('change', e => {
+  $('grid').querySelectorAll('.item').forEach(el => {
+    el.querySelector('input').checked = e.target.checked;
+    el.classList.toggle('sel', e.target.checked);
+  });
+  updateZip();
+});
+
+$('zip').addEventListener('click', async () => {
+  const idx = selected();
+  $('zip').disabled = true;
+  const zip = new JSZip();
+  let done = 0, failed = 0;
+  await Promise.all(idx.map(async i => {
+    try { zip.file(fileName(i), await toJpeg(srcFor(images[i]))); }
+    catch { failed++; }
+    setStatus(`Downloading… ${++done} of ${idx.length}`);
+  }));
+  setStatus('Making the .zip file…');
+  saveBlob(await zip.generateAsync({ type: 'blob' }), `${baseName}_images.zip`);
+  setStatus(failed ? `Saved ${idx.length - failed} images. ${failed} failed.` : `Saved ${idx.length} images.`, failed ? 'err' : 'ok');
+  updateZip();
+});
+</script>
+</body>
+</html>
