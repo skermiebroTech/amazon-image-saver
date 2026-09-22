@@ -51,6 +51,7 @@
   #status { min-height: 1.5em; margin: 8px 0 0; font-size: 14px; }
   #status.err { color: var(--err); }
   #status.ok { color: var(--ok); }
+  #status a { color: var(--accent); font-weight: 600; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .toolbar .left { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   .toolbar label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
@@ -267,14 +268,25 @@ async function toJpeg(url) {
   return new Promise((ok, bad) => c.toBlob(b => b ? ok(b) : bad(new Error('Convert failed')), 'image/jpeg', 0.95));
 }
 
+// Start the download. Then show a link to the same file, because some browsers
+// block a download that a script starts (Edge and Chrome show a small icon in
+// the address bar and wait for permission).
+let lastUrl = null;
 function saveBlob(blob, name) {
+  if (lastUrl) URL.revokeObjectURL(lastUrl);
+  lastUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = lastUrl;
   a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  const st = $('status');
+  st.className = 'ok';
+  st.textContent = `Saved ${name} (${(blob.size / 1024).toFixed(0)} KB). No file? `;
+  const link = document.createElement('a');
+  link.href = lastUrl; link.download = name; link.textContent = 'Click here to save it.';
+  st.appendChild(link);
 }
 
 function render(title) {
@@ -403,7 +415,7 @@ $('zip').addEventListener('click', async () => {
   }));
   setStatus('Making the .zip file…');
   saveBlob(await zip.generateAsync({ type: 'blob' }), `${baseName}_images.zip`);
-  setStatus(failed ? `Saved ${idx.length - failed} images. ${failed} failed.` : `Saved ${idx.length} images.`, failed ? 'err' : 'ok');
+  if (failed) $('status').prepend(`${failed} of ${idx.length} images failed. `);
   updateZip();
 });
 </script>
