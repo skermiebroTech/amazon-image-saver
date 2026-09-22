@@ -149,9 +149,10 @@ function normalizeInput(raw) {
 }
 
 async function fetchPage(url) {
-  let lastErr;
+  const errors = [];
   for (const [i, p] of PROXIES.entries()) {
-    setStatus(`Loading the listing (proxy ${i + 1} of ${PROXIES.length})…`);
+    const host = new URL(p(url)).host;
+    setStatus(`Loading the listing (proxy ${i + 1} of ${PROXIES.length}: ${host})…`);
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 25000);
@@ -160,10 +161,17 @@ async function fetchPage(url) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const html = await res.text();
       if (extract(html).length) return html;
-      lastErr = new Error(/captcha|api-services-support/i.test(html) ? 'Amazon showed a captcha' : 'No images in the response');
-    } catch (e) { lastErr = e; }
+      throw new Error(/captcha|api-services-support/i.test(html) ? 'Amazon showed a captcha' : 'no images in the response');
+    } catch (e) {
+      errors.push(`${host}: ${e.name === 'AbortError' ? 'timed out after 25 s' : e.message}`);
+    }
   }
-  throw lastErr || new Error('All proxies failed');
+  // "Failed to fetch" with no HTTP status means the browser never got a reply.
+  // A tracking-prevention setting, an ad blocker, or a network filter blocks the proxy.
+  const blocked = errors.every(e => /Failed to fetch|NetworkError|Load failed/i.test(e));
+  const err = new Error(errors.join(' · '));
+  err.blocked = blocked;
+  throw err;
 }
 
 // Image ID is the part after /images/I/ and before the first dot (size modifiers follow it).
@@ -315,11 +323,17 @@ $('form').addEventListener('submit', async e => {
   try {
     load(await fetchPage(input.url), input.asin);
   } catch (err) {
-    setStatus(`Could not load the listing: ${err.message}. Try again, or paste the page source below.`, 'err');
+    const hint = err.blocked
+      ? 'Your browser or an extension blocks the proxy sites. In Edge, set Tracking prevention to Balanced, turn off ad blockers for this site, or use the page source below.'
+      : 'Try again, or paste the page source below.';
+    setStatus(`Could not load the listing. ${err.message}. ${hint}`, 'err');
     $('manual').open = true;
   }
   $('go').disabled = false;
 });
+
+const preset = new URLSearchParams(location.search).get('url');
+if (preset) { $('url').value = preset; $('form').requestSubmit(); }
 
 $('parse').addEventListener('click', () => {
   try { load($('html').value, null); } catch (err) { setStatus(err.message, 'err'); }
